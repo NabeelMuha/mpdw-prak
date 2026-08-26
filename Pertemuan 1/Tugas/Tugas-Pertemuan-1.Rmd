@@ -1,0 +1,755 @@
+---
+title: "Tugas-Pertemuan-1"
+author: "Nabeel Muhammad Diaz"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## Deskripsi Data
+
+Data yang digunakan kelompok adalah **Daily Total Sunspot Number** (bilangan bintik matahari harian) dari **SILSO**, World Data Center, Royal Observatory of Belgium (<https://www.sidc.be/SILSO/datafiles>). Bilangan bintik matahari adalah indeks aktivitas magnetik permukaan Matahari yang dihitung dari jumlah bintik dan kelompok bintik yang teramati.
+
+Kelompok memilih **500 observasi harian terakhir** dari data tersebut, lalu dibagi rata kepada 5 anggota sehingga masing-masing memperoleh 100 observasi. Laporan ini mengerjakan **bagian ke-2, yaitu observasi ke-101 hingga ke-200**, yang mencakup periode **27 Juni 2025 sampai 4 Oktober 2025**.
+
+## Library/Packages
+
+*Package* R yang akan digunakan pada perkuliahan Analisis Deret Waktu sesi UTS adalah: `forecast`, `graphics`, `TTR`, `TSA` . Jika *package* tersebut belum ada, silakan install terlebih dahulu.
+
+```{r}
+#install.packages("forecast")
+#install.packages("graphics")
+#install.packages("TTR")
+#install.packages("TSA")
+```
+
+Jika sudah ada, silakan panggil library *package* tersebut.
+
+```{r}
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+```
+
+## Impor Data
+
+```{r}
+#via csv gunakan read.csv("namafile.csv")
+data1 <- read.csv("data/sunspot_bagian2.csv")
+
+# menampilkan 6 data pertama
+head(data1)
+```
+
+## Eksplorasi Data
+
+`View()` : menampilkan data dalam bentuk tabel, `str()` : menampilkan struktur data, `dim()` : menampilkan dimensi data
+
+```{r}
+#View(data1)
+str(data1)
+dim(data1)
+```
+
+Mengubah data agar terbaca sebagai data deret waktu dengan fungsi `ts()` .
+
+```{r}
+data1.ts <- ts(data1$Sunspot)
+```
+
+Menampilkan ringkasan data
+
+```{r}
+summary(data1.ts)
+```
+
+Membuat plot data deret waktu
+
+```{r}
+ts.plot(data1.ts, xlab="Time Period ", ylab="Sunspot Number", 
+        main = "Time Series Plot of Sunspot Number")
+points(data1.ts)
+```
+
+Plot deret waktu menunjukkan data berfluktuasi tajam dari hari ke hari dengan rentang nilai 36 hingga 204 dan rata-rata 131,56. Terdapat kecenderungan naik yang lemah sepanjang periode pengamatan, namun tidak berupa tren linear yang persisten. Fluktuasi harian yang besar merupakan ciri khas data aktivitas matahari karena bintik matahari muncul dan menghilang dalam hitungan hari.
+
+## Single Moving Average & Double Moving Average
+
+### Pembagian Data
+
+Pembagian data latih dan data uji dilakukan dengan perbandingan 80% data latih dan 20% data uji.
+
+```{r}
+# hitung jumlah data
+n <- nrow(data1)
+
+# tentukan batas 80%
+n_train <- floor(0.8 * n)
+
+# bagi data
+training_ma <- data1[1:n_train, ]
+testing_ma  <- data1[(n_train+1):n, ]
+
+# ubah ke time series
+train_ma.ts <- ts(training_ma$Sunspot)
+test_ma.ts  <- ts(testing_ma$Sunspot)
+
+# banyaknya data uji
+n_test <- nrow(testing_ma)
+c(n = n, n_train = n_train, n_test = n_test)
+```
+
+Eksplorasi data dilakukan pada keseluruhan data, data latih serta data uji menggunakan plot data deret waktu.
+
+```{r}
+#eksplorasi keseluruhan data
+plot(data1.ts, col="red",main="Plot semua data")
+points(data1.ts)
+
+#eksplorasi data latih
+plot(train_ma.ts, col="blue",main="Plot data latih")
+points(train_ma.ts)
+
+#eksplorasi data uji
+plot(test_ma.ts, col="blue",main="Plot data uji")
+points(test_ma.ts)
+```
+
+Eksplorasi data juga dapat dilakukan menggunakan package `ggplot2` dengan terlebih dahulu memanggil library *package* `ggplot2`.
+
+```{r}
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training_ma, aes(x = Periode, y = Sunspot, col = "Data Latih")) +
+  geom_line(data = testing_ma, aes(x = Periode, y = Sunspot, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "Sunspot Number", color = "Legend") +
+   scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+ 
+```
+
+Terlihat bahwa rata-rata data uji (150,15) lebih tinggi daripada rata-rata data latih (126,91), sehingga terdapat pergeseran level antara kedua bagian data.
+
+### Single Moving Average (SMA)
+
+Ide dasar dari Single Moving Average (SMA) adalah data suatu periode dipengaruhi oleh data periode sebelumnya. Metode pemulusan ini cocok digunakan untuk pola data stasioner atau konstan. Prinsip dasar metode pemulusan ini adalah data pemulusan pada periode ke-t merupakan rata rata dari m buah data pada periode ke-t hingga periode ke (t-m+1).
+
+$$
+S_t = \frac{1}{m} \sum_{i=t-m+1}^{t} X_i
+$$
+
+Data pemulusan pada periode ke-t selanjutnya digunakan sebagai nilai peramalan pada periode ke t+1.
+
+$$
+F_t = S_{t-1}, F_{n,h} = S_n
+$$
+
+Pemulusan menggunakan metode SMA dilakukan dengan fungsi `SMA()`. Dalam hal ini akan dilakukan pemulusan dengan parameter `m=4`.
+
+```{r}
+data.sma<-SMA(train_ma.ts, n=4)
+data.sma
+```
+
+Data pemulusan pada periode ke-t selanjutnya digunakan sebagai nilai peramalan pada periode ke t+1 sehingga hasil peramalan 1 periode kedepan adalah sebagai berikut.
+
+```{r}
+data.ramal<-c(NA,data.sma)
+data.ramal #forecast 1 periode ke depan
+```
+
+Selanjutnya dilakukan peramalan sebanyak 20 periode sesuai dengan jumlah data uji. Pada metode SMA, seluruh hasil peramalan untuk 20 periode ke depan akan memiliki nilai yang sama dengan hasil ramalan satu periode ke depan.
+
+```{r}
+data.gab<-cbind(
+  aktual=c(data1.ts),
+  pemulusan=c(data.sma,rep(NA,n_test)),
+  ramalan=c(data.ramal,rep(data.ramal[length(data.ramal)],n_test-1)))
+
+data.gab #forecast 20 periode ke depan
+```
+
+Adapun plot data deret waktu dari hasil peramalan yang dilakukan adalah sebagai berikut.
+
+```{r}
+ts.plot(data1.ts, xlab="Time Period ", ylab="Sunspot Number", main= "SMA N=4 Data Sunspot")
+points(data1.ts)
+lines(data.gab[,2],col="green",lwd=2)
+lines(data.gab[,3],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.5)
+```
+
+Selanjutnya perhitungan akurasi dilakukan dengan ukuran akurasi *Sum Squares Error* (SSE), *Mean Square Error* (MSE) dan *Mean Absolute Percentage Error* (MAPE). Perhitungan akurasi dilakukan baik pada data latih maupun pada data uji.
+
+$$
+SSE = \sum_{t=1}^{n} (y_t - \hat{y}_t)^2
+$$
+$$
+MSE = \frac{1}{n} \sum_{t=1}^{n} (y_t - \hat{y}_t)^2
+$$
+$$
+MAPE = \frac{1}{n} \sum_{t=1}^{n} \left|\frac{y_t - \hat{y}_t}{y_t}\right| * 100
+$$
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.sma = train_ma.ts-data.ramal[1:length(train_ma.ts)]
+
+SSE_train.sma = sum(error_train.sma[5:length(train_ma.ts)]^2)
+MSE_train.sma = mean(error_train.sma[5:length(train_ma.ts)]^2)
+MAPE_train.sma = mean(abs((error_train.sma[5:length(train_ma.ts)]/train_ma.ts[5:length(train_ma.ts)])*100))
+
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.sma) <- c("Akurasi m = 4")
+akurasi_train.sma
+```
+
+Dalam hal ini nilai MAPE data latih pada metode pemulusan SMA sekitar 22%, nilai ini dikategorikan sebagai akurasi yang cukup/layak namun belum baik. Berbeda dengan data penjualan yang relatif mulus, data bintik matahari berfluktuasi sangat tajam antar hari sehingga sulit dimuluskan hanya dengan rata-rata bergerak. Selanjutnya dilakukan perhitungan nilai MAPE data uji pada metode pemulusan SMA.
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.sma = test_ma.ts-data.gab[(n_train+1):n,3]
+
+SSE_test.sma = sum(error_test.sma^2)
+MSE_test.sma = mean(error_test.sma^2)
+MAPE_test.sma = mean(abs((error_test.sma/test_ma.ts*100)))
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.sma) <- c("Akurasi m = 4")
+akurasi_test.sma
+```
+
+Perhitungan akurasi pada data uji menghasilkan nilai MAPE sekitar 53%, jauh lebih besar daripada data latih. Penyebabnya adalah ramalan SMA bersifat konstan untuk seluruh horizon peramalan, sedangkan data aktual pada periode uji justru mengalami kenaikan level. Akibatnya galat menumpuk seiring bertambahnya horizon peramalan.
+
+### Double Moving Average (DMA)
+
+Metode pemulusan Double Moving Average (DMA) pada dasarnya mirip dengan SMA. Namun demikian, metode ini lebih cocok digunakan untuk pola data trend. Proses pemulusan dengan rata rata dalam metode ini dilakukan sebanyak 2 kali.
+
+-   **Tahap I:**
+
+$$
+S_{1,t} = \frac{1}{m} \sum_{i=t-m+1}^{t} X_i
+$$
+
+-   **Tahap II:**
+
+$$
+S_{2,t} = \frac{1}{m} \sum_{i=t-m+1}^{t} S_{1,i}
+$$
+
+Forecast $h$ langkah ke depan dihitung dengan:
+
+$$
+F_{2,t,t+h} = A_t + B_t \,(h)
+$$
+
+dengan komponen level ($A_t$) dan tren ($B_t$):
+
+$$
+A_t = 2S_{1,t} - S_{2,t}
+\qquad\text{dan}\qquad
+B_t = \frac{2}{m-1}\,\big(S_{1,t} - S_{2,t}\big)
+$$
+
+```{r}
+dma <- SMA(data.sma, n = 4)
+At <- 2*data.sma - dma
+Bt <- 2/(4-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:n_test
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(data1.ts), 
+                   pemulusan1 = c(data.sma,rep(NA,n_test)),
+                   pemulusan2 = c(dma, rep(NA,n_test)),
+                   At = c(At, rep(NA,n_test)), 
+                   Bt = c(Bt,rep(NA,n_test)),
+                   ramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+
+Hasil pemulusan menggunakan metode DMA divisualisasikan sebagai berikut
+
+```{r}
+ts.plot(data1.ts, xlab="Time Period ", ylab="Sunspot Number", main= "DMA N=4 Data Sunspot")
+points(data1.ts)
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+
+```
+
+Selanjutnya perhitungan akurasi dilakukan baik pada data latih maupun data uji. Perhitungan akurasi dilakukan dengan ukuran akurasi SSE, MSE dan MAPE.
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.dma = train_ma.ts-data.ramal2[1:length(train_ma.ts)]
+
+SSE_train.dma = sum(error_train.dma[8:length(train_ma.ts)]^2)
+MSE_train.dma = mean(error_train.dma[8:length(train_ma.ts)]^2)
+MAPE_train.dma = mean(abs((error_train.dma[8:length(train_ma.ts)]/train_ma.ts[8:length(train_ma.ts)])*100))
+
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.dma) <- c("Akurasi m = 4")
+akurasi_train.dma
+```
+
+Perhitungan akurasi pada data latih menghasilkan nilai MAPE sekitar 21%, sedikit lebih kecil daripada SMA. Hal ini menunjukkan penambahan komponen tren membantu model mengikuti pergerakan data pada data latih. Selanjutnya, perhitungan nilai akurasi dilakukan pada data uji.
+
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.dma = test_ma.ts-data.gab2[(n_train+1):n,6]
+SSE_test.dma = sum(error_test.dma^2)
+MSE_test.dma = mean(error_test.dma^2)
+MAPE_test.dma = mean(abs((error_test.dma/test_ma.ts*100)))
+
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.dma) <- c("Akurasi m = 4")
+akurasi_test.dma
+
+```
+
+Berbeda dengan data latih, perhitungan akurasi pada data uji menghasilkan nilai MAPE yang sangat besar, yaitu sekitar 116%. Penyebabnya dapat dilihat dari nilai $B_t$ pada akhir data latih yang bernilai negatif (sekitar $-8{,}1$), sehingga ramalan diekstrapolasi menurun secara linear. Ramalan periode pertama masih bernilai sekitar 47, tetapi pada periode ke-20 nilainya turun hingga sekitar $-107$, padahal bilangan bintik matahari tidak mungkin bernilai negatif. Hal ini menunjukkan bahwa ekstrapolasi tren linear tidak sesuai untuk data yang berosilasi seperti bintik matahari.
+
+Pada data latih, metode DMA lebih baik dibandingkan dengan metode SMA, sedangkan pada data uji, metode SMA jauh lebih baik dibandingkan DMA.
+
+## Single Exponential Smoothing & Double Exponential Smoothing
+
+Metode Exponential Smoothing merupakan metode pemulusan deret waktu dengan memberikan bobot yang menurun secara eksponensial pada data historis, di mana nilai terbaru mendapat bobot lebih besar dibanding nilai yang lebih lama. Metode ini menggunakan satu atau lebih parameter pemulusan yang secara langsung menentukan besar kecilnya bobot setiap pengamatan. Pemilihan parameter yang tepat akan sangat berpengaruh terhadap hasil ramalan. Secara umum, Exponential Smoothing dibedakan menjadi dua jenis, yaitu model tunggal (single) yang digunakan untuk data tanpa tren maupun musiman, serta model ganda (double) yang mampu menangkap adanya tren pada data.
+
+### Pembagian Data
+
+Pembagian data latih dan data uji dilakukan dengan perbandingan 80% data latih dan 20% data uji.
+
+```{r}
+# jumlah baris data
+n <- nrow(data1)
+
+# hitung batas 80%
+n_train <- floor(0.8 * n)
+
+# bagi data
+training <- data1[1:n_train, ]
+testing  <- data1[(n_train+1):n, ]
+
+# ubah ke time series
+train.ts <- ts(training$Sunspot)
+test.ts  <- ts(testing$Sunspot)
+```
+
+### Eksplorasi
+
+Eksplorasi dilakukan dengan membuat plot data deret waktu untuk keseluruhan data, data latih, dan data uji.
+
+```{r}
+#eksplorasi data
+plot(data1.ts, col="black",main="Plot semua data")
+points(data1.ts)
+
+plot(train.ts, col="red",main="Plot data latih")
+points(train.ts)
+
+plot(test.ts, col="blue",main="Plot data uji")
+points(test.ts)
+```
+
+```{r}
+#Eksplorasi dengan GGPLOT
+library(ggplot2)
+ggplot() + 
+  geom_line(data = training, aes(x = Periode, y = Sunspot, col = "Data Latih")) +
+  geom_line(data = testing, aes(x = Periode, y = Sunspot, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "Sunspot Number", color = "Legend") +
+  scale_colour_manual(name="Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+
+## Single Exponential Smoothing
+
+Single Exponential Smoothing (SES) adalah metode peramalan deret waktu yang dikembangkan untuk mengatasi kelemahan Moving Average. Jika pada Moving Average setiap data periode sebelumnya dianggap memiliki bobot yang sama, maka SES memberikan bobot yang semakin mengecil secara eksponensial terhadap data lama, sehingga data terbaru diberi bobot lebih besar.
+
+Single Exponential Smoothing merupakan metode pemulusan yang tepat digunakan untuk data dengan pola stasioner atau konstan.
+
+Nilai pemulusan pada periode ke-t didapat dari persamaan:
+
+$$ \tilde{y}_T=\lambda y_t+(1-\lambda)\tilde{y}_{T-1} $$
+
+Nilai parameter $\lambda$ adalah nilai antara 0 dan 1.
+
+Nilai pemulusan periode ke-t bertindak sebagai nilai ramalan pada periode ke-$(T+\tau)$.
+
+$$ \tilde{y}_{T+\tau}(T)=\tilde{y}_T $$
+
+Pemulusan dengan metode SES dapat dilakukan dengan dua fungsi dari *packages* berbeda, yaitu (1) fungsi `ses()` dari *packages* `forecast` dan (2) fungsi `HoltWinters` dari *packages* `stats` .
+
+```{r}
+#Cara 1 (fungsi ses)
+ses.1 <- ses(train.ts, h = 20, alpha = 0.2)
+plot(ses.1)
+ses.1
+
+ses.2<- ses(train.ts, h = 20, alpha = 0.7)
+plot(ses.2)
+ses.2
+```
+
+Pada fungsi `ses()` , terdapat beberapa argumen yang umum digunakan, yaitu
+
+-   `y` : nilai data deret waktu
+
+-   `alpha` : parameter pemulusan utama (0–1), mengatur bobot data terbaru vs data lama.
+
+-   `beta` : parameter pemulusan tren.
+
+-   `gamma` : parameter pemulusan musiman.
+
+-   `h` : jumlah periode ke depan yang ingin diramalkan (forecast horizon).
+
+    Kasus di atas merupakan contoh inisialisasi nilai parameter $\lambda$ dengan nilai `alpha` 0,2 dan 0,7 dan banyak periode data yang akan diramalkan adalah sebanyak 20 periode, menyesuaikan jumlah data uji.
+
+Untuk mendapatkan gambar hasil pemulusan pada data latih dengan fungsi `ses()` , perlu digunakan fungsi `autoplot()` dan `autolayer()` dari *library packages* `ggplot2` .
+
+```{r}
+autoplot(ses.1) +
+  autolayer(fitted(ses.1), series="Fitted") +
+  ylab("Sunspot Number") + xlab("Periode")
+```
+
+Selanjutnya akan digunakan fungsi `HoltWinters()` dengan nilai inisialisasi parameter dan panjang periode peramalan yang sama dengan fungsi `ses()` .
+
+```{r}
+#Cara 2 (fungsi Holtwinter)
+ses1<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.2)
+plot(ses1)
+
+#ramalan
+ramalan1<- forecast(ses1, h=20)
+ramalan1
+
+ses2<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.7)
+plot(ses2)
+
+#ramalan
+ramalan2<- forecast(ses2, h=20)
+ramalan2
+```
+
+Fungsi `HoltWinters` memiliki argumen yang sama dengan fungsi `ses()` . Argumen-argumen kedua fungsi dapat dilihat lebih lanjut dengan `?ses()` atau `?HoltWinters` .
+
+Nilai parameter $\alpha$ dari kedua fungsi dapat dioptimalkan menyesuaikan dari *error*-nya paling minimumnya. Caranya adalah dengan membuat parameter $\alpha =$ `NULL` .
+
+```{r}
+#SES
+ses.opt <- ses(train.ts, h = 20, alpha = NULL)
+plot(ses.opt)
+ses.opt
+
+#Lamda Optimum Holt Winter
+HWopt<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE,alpha = NULL)
+HWopt
+plot(HWopt)
+
+#ramalan
+ramalanopt<- forecast(HWopt, h=20)
+ramalanopt
+```
+
+Nilai $\alpha$ optimum yang dihasilkan mendekati 1. Hal ini menunjukkan bahwa data bintik matahari sangat dipengaruhi oleh nilai pengamatan terakhir, sehingga model cenderung menyerupai *naive forecast* di mana ramalan hampir sama dengan data terakhir. Karakteristik ini umum ditemukan pada deret waktu dengan fluktuasi tinggi.
+
+Setelah dilakukan peramalan, akan dilakukan perhitungan keakuratan hasil peramalan. Perhitungan akurasi ini dilakukan baik pada data latih dan data uji.
+
+#### Akurasi Data Latih
+
+Perhitungan akurasi data dapat dilakukan dengan cara langsung maupun manual. Secara langsung, nilai akurasi dapat diambil dari objek yang tersimpan pada hasil SES, yaitu *sum of squared errors* (SSE). Nilai akurasi lain dapat dihitung pula dari nilai SSE tersebut.
+
+```{r}
+#Keakuratan Metode
+#Pada data training
+
+# SES dengan alpha = 0.2
+SSE1<-ses1$SSE
+MSE1<-ses1$SSE/length(train.ts)
+RMSE1<-sqrt(MSE1)
+
+akurasi1 <- matrix(c(SSE1,MSE1,RMSE1))
+row.names(akurasi1)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi lamda=0.2")
+akurasi1
+
+# SES dengan alpha = 0.7
+SSE2<-ses2$SSE
+MSE2<-ses2$SSE/length(train.ts)
+RMSE2<-sqrt(MSE2)
+
+akurasi2 <- matrix(c(SSE2,MSE2,RMSE2))
+row.names(akurasi2)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi2) <- c("Akurasi lamda=0.7")
+akurasi2
+```
+
+```{r}
+#Cara Manual
+# Alpha = 0.2
+fitted1<-ramalan1$fitted
+sisaan1<-ramalan1$residuals
+head(sisaan1)
+
+resid1<-training$Sunspot-ramalan1$fitted
+head(resid1)
+
+SSE.1=sum(sisaan1[2:length(train.ts)]^2)
+SSE.1
+
+MSE.1 = SSE.1/length(train.ts)
+MSE.1
+
+MAPE.1 = sum(abs(sisaan1[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.1
+
+akurasi.1 <- matrix(c(SSE.1,MSE.1,MAPE.1))
+row.names(akurasi.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.1) <- c("Akurasi lamda=0.2")
+akurasi.1
+
+# Alpha = 0.7
+fitted2<-ramalan2$fitted
+sisaan2<-ramalan2$residuals
+head(sisaan2)
+
+resid2<-training$Sunspot-ramalan2$fitted
+head(resid2)
+
+SSE.2=sum(sisaan2[2:length(train.ts)]^2)
+SSE.2
+
+MSE.2 = SSE.2/length(train.ts)
+MSE.2
+
+MAPE.2 = sum(abs(sisaan2[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.2
+
+akurasi.2 <- matrix(c(SSE.2,MSE.2,MAPE.2))
+row.names(akurasi.2)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.2) <- c("Akurasi lamda=0.7")
+akurasi.2
+```
+
+Berdasarkan nilai SSE, MSE, RMSE, dan MAPE di antara kedua parameter, pada data ini nilai parameter $\lambda=0,7$ menghasilkan akurasi yang **lebih baik** dibanding $\lambda=0,2$ , ditunjukkan oleh nilai masing-masing ukuran akurasi yang lebih kecil. Hasil ini berbeda dengan data yang bersifat stasioner, karena data bintik matahari berubah cepat sehingga pembobotan yang lebih besar pada pengamatan terbaru justru lebih menguntungkan.
+
+#### Akurasi Data Uji
+
+Akurasi data uji dapat dihitung dengan cara yang hampir sama dengan perhitungan akurasi data latih.
+
+```{r}
+# jumlah observasi uji
+n_test <- nrow(testing)
+
+# error (ramalan - aktual), samakan panjang dan tipe numeric
+e1   <- as.numeric(ramalan1$mean)[1:n_test] - as.numeric(testing$Sunspot)
+e2   <- as.numeric(ramalan2$mean)[1:n_test] - as.numeric(testing$Sunspot)
+eopt <- as.numeric(ramalanopt$mean)[1:n_test] - as.numeric(testing$Sunspot)
+
+# SSE / MSE / RMSE untuk masing-masing model (abaikan NA)
+SSEtesting1  <- sum(e1^2,  na.rm = TRUE)
+MSEtesting1  <- mean(e1^2, na.rm = TRUE)
+RMSEtesting1 <- sqrt(MSEtesting1)
+
+SSEtesting2  <- sum(e2^2,  na.rm = TRUE)
+MSEtesting2  <- mean(e2^2, na.rm = TRUE)
+RMSEtesting2 <- sqrt(MSEtesting2)
+
+SSEtestingopt  <- sum(eopt^2,  na.rm = TRUE)
+MSEtestingopt  <- mean(eopt^2, na.rm = TRUE)
+RMSEtestingopt <- sqrt(MSEtestingopt)
+
+# Tabel ringkas
+akurasitesting_SSE <- matrix(c(SSEtesting1, SSEtesting2, SSEtestingopt),
+                             nrow = 3,
+                             dimnames = list(c("SSE1","SSE2","SSEopt"), "Nilai"))
+akurasitesting_MSE <- matrix(c(MSEtesting1, MSEtesting2, MSEtestingopt),
+                             nrow = 3,
+                             dimnames = list(c("MSE1","MSE2","MSEopt"), "Nilai"))
+akurasitesting_RMSE <- matrix(c(RMSEtesting1, RMSEtesting2, RMSEtestingopt),
+                              nrow = 3,
+                              dimnames = list(c("RMSE1","RMSE2","RMSEopt"), "Nilai"))
+
+akurasitesting_SSE
+akurasitesting_MSE
+akurasitesting_RMSE
+
+```
+
+Menarik untuk dicatat bahwa pada data uji urutan performa justru berbalik dari data latih: $\lambda=0,2$ menjadi yang terbaik. Penjelasannya adalah $\lambda$ kecil menghasilkan level akhir yang lebih halus dan lebih tinggi (sekitar 87), yang lebih dekat dengan rata-rata data uji, sedangkan $\lambda$ besar mengunci level pada nilai pengamatan terakhir data latih yang sedang berada di posisi rendah (sekitar 66).
+
+Selain dengan cara di atas, perhitungan nilai akurasi dapat menggunakan fungsi `accuracy()` dari *package* `forecast` . Penggunaannya yaitu dengan menuliskan `accuracy(hasil ramalan, kondisi aktual)` . Contohnya adalah sebagai berikut.
+
+```{r}
+accuracy(ramalan1, testing$Sunspot)
+accuracy(ramalan2, testing$Sunspot)
+accuracy(ramalanopt, testing$Sunspot)
+```
+
+## *Double Exponential Smoothing* (DES)
+
+Metode pemulusan *Double Exponential Smoothing* (DES) digunakan untuk data yang memiliki pola tren. Metode DES adalah metode semacam SES, hanya saja dilakukan dua kali, yaitu pertama untuk tahapan 'level' dan kedua untuk tahapan 'tren'. Pemulusan menggunakan metode ini akan menghasilkan peramalan tidak konstan untuk periode berikutnya.
+
+Pemulusan dengan metode DES kali ini akan menggunakan fungsi `HoltWinters()` . Jika sebelumnya nilai argumen `beta` dibuat `FALSE` , kali ini argumen tersebut akan diinisialisasi bersamaan dengan nilai `alpha` .
+
+```{r}
+#Lamda=0.2 dan gamma=0.2
+des.1<- HoltWinters(train.ts, gamma = FALSE, beta = 0.2, alpha = 0.2)
+plot(des.1)
+
+#ramalan
+ramalandes1<- forecast(des.1, h=20)
+ramalandes1
+
+#Lamda=0.6 dan gamma=0.3
+des.2<- HoltWinters(train.ts, gamma = FALSE, beta = 0.3, alpha = 0.6)
+plot(des.2)
+
+#ramalan
+ramalandes2<- forecast(des.2, h=20)
+ramalandes2
+```
+
+Selanjutnya jika ingin membandingkan plot data latih dan data uji adalah sebagai berikut.
+
+```{r}
+plot(data1.ts)
+lines(des.1$fitted[,1], lty=2, col="blue")
+lines(ramalandes1$mean, col="red")
+```
+
+Untuk mendapatkan nilai parameter optimum dari DES, argumen `alpha` dan `beta` dapat dibuat `NULL` seperti berikut.
+
+```{r}
+#Lamda dan gamma optimum
+des.opt<- HoltWinters(train.ts, gamma = FALSE)
+des.opt
+plot(des.opt)
+
+#ramalan
+ramalandesopt<- forecast(des.opt, h=20)
+ramalandesopt
+```
+
+Selanjutnya akan dilakukan perhitungan akurasi pada data latih maupun data uji dengan ukuran akurasi SSE, MSE dan MAPE.
+
+#### Akurasi Data Latih
+
+```{r}
+#Akurasi Data Training
+ssedes.train1<-des.1$SSE
+msedes.train1<-ssedes.train1/length(train.ts)
+sisaandes1<-ramalandes1$residuals
+head(sisaandes1)
+
+mapedes.train1 <- sum(abs(sisaandes1[3:length(train.ts)]/train.ts[3:length(train.ts)])
+                      *100)/length(train.ts)
+
+akurasides.1 <- matrix(c(ssedes.train1,msedes.train1,mapedes.train1))
+row.names(akurasides.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.1) <- c("Akurasi lamda=0.2 dan gamma=0.2")
+akurasides.1
+
+ssedes.train2<-des.2$SSE
+msedes.train2<-ssedes.train2/length(train.ts)
+sisaandes2<-ramalandes2$residuals
+head(sisaandes2)
+
+mapedes.train2 <- sum(abs(sisaandes2[3:length(train.ts)]/train.ts[3:length(train.ts)])
+                      *100)/length(train.ts)
+
+akurasides.2 <- matrix(c(ssedes.train2,msedes.train2,mapedes.train2))
+row.names(akurasides.2)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.2) <- c("Akurasi lamda=0.6 dan gamma=0.3")
+akurasides.2
+```
+
+Hasil akurasi dari data latih didapatkan skenario 2 dengan lamda=0.6 dan gamma=0.3 memiliki hasil yang jauh lebih baik, dengan MSE sekitar 553 dibandingkan skenario 1 yang mencapai sekitar 2330. Kembali terlihat bahwa parameter pemulusan yang besar lebih sesuai untuk data bintik matahari yang berfluktuasi cepat.
+
+#### Akurasi Data Uji
+
+```{r}
+#Akurasi Data Testing
+selisihdes1<-ramalandes1$mean-testing$Sunspot
+selisihdes1
+
+SSEtestingdes1<-sum(selisihdes1^2)
+MSEtestingdes1<-SSEtestingdes1/length(testing$Sunspot)
+MAPEtestingdes1<-sum(abs(selisihdes1/testing$Sunspot)*100)/length(testing$Sunspot)
+
+selisihdes2<-ramalandes2$mean-testing$Sunspot
+selisihdes2
+
+SSEtestingdes2<-sum(selisihdes2^2)
+MSEtestingdes2<-SSEtestingdes2/length(testing$Sunspot)
+MAPEtestingdes2<-sum(abs(selisihdes2/testing$Sunspot)*100)/length(testing$Sunspot)
+
+selisihdesopt<-ramalandesopt$mean-testing$Sunspot
+selisihdesopt
+
+SSEtestingdesopt<-sum(selisihdesopt^2)
+MSEtestingdesopt<-SSEtestingdesopt/length(testing$Sunspot)
+MAPEtestingdesopt<-sum(abs(selisihdesopt/testing$Sunspot)*100)/length(testing$Sunspot)
+
+akurasitestingdes <-
+  matrix(c(SSEtestingdes1,MSEtestingdes1,MAPEtestingdes1,SSEtestingdes2,MSEtestingdes2,
+           MAPEtestingdes2,SSEtestingdesopt,MSEtestingdesopt,MAPEtestingdesopt),
+         nrow=3,ncol=3)
+row.names(akurasitestingdes)<- c("SSE", "MSE", "MAPE")
+colnames(akurasitestingdes) <- c("des ske1","des ske2","des opt")
+akurasitestingdes
+```
+
+Pada data uji, skenario 1 dan 2 menghasilkan galat yang sangat besar dengan MAPE mencapai sekitar 128% dan 100%. Sama seperti pada DMA, penyebabnya adalah komponen tren yang diestimasi bernilai negatif pada akhir data latih, sehingga ramalan diekstrapolasi menurun dan bahkan menjadi negatif pada horizon yang jauh. Sebaliknya, skenario optimum menghasilkan tren yang hampir datar sehingga ramalannya jauh lebih masuk akal dan MAPE-nya turun menjadi sekitar 46%.
+
+#### Perbandingan SES dan DES
+
+```{r}
+MSEfull <-
+  matrix(c(MSEtesting1,MSEtesting2,MSEtestingopt,MSEtestingdes1,MSEtestingdes2,
+           MSEtestingdesopt),nrow=3,ncol=2)
+row.names(MSEfull)<- c("ske 1", "ske 2", "ske opt")
+colnames(MSEfull) <- c("ses","des")
+MSEfull
+```
+
+Kedua metode dapat dibandingkan dengan menggunakan ukuran akurasi yang sama. Contoh di atas adalah perbandingan kedua metode dengan ukuran akurasi MSE. Hasilnya didapatkan metode **SES lebih baik** dibandingkan metode DES pada data ini, dilihat dari nilai MSE terkecil yang dicapai SES skenario 1 dengan $\lambda=0,2$. Hasil ini berbeda dengan contoh pada materi praktikum, dan penyebabnya adalah karakteristik data: bintik matahari tidak memiliki tren yang persisten, sehingga penambahan komponen tren pada DES tidak memberikan manfaat dan justru menambah galat pada peramalan jangka panjang.
+
+## Kesimpulan
+
+Berdasarkan seluruh analisis yang telah dilakukan pada data bilangan bintik matahari harian bagian ke-2 (observasi 101–200), diperoleh ringkasan sebagai berikut.
+
+**Perbandingan pada data latih.** Metode dengan komponen tren memberikan galat lebih kecil. DMA (MSE sekitar 795) lebih baik daripada SMA (MSE sekitar 979), dan DES skenario 2 (MSE sekitar 553) lebih baik daripada SES $\lambda=0,2$ (MSE sekitar 1214). Nilai MAPE data latih untuk seluruh metode berada pada kisaran 15% sampai 35%.
+
+**Perbandingan pada data uji.** Urutan performa berbalik secara tajam. Metode yang mengekstrapolasi tren secara linear, yaitu DMA dan DES skenario 1 dan 2, menghasilkan galat sangat besar dengan MAPE di atas 99%, bahkan menghasilkan ramalan bernilai negatif yang tidak mungkin terjadi pada bilangan bintik matahari. Sebaliknya metode tanpa komponen tren memberikan hasil yang jauh lebih baik.
+
+**Metode terbaik.** Berdasarkan metrik akurasi pada data uji, metode terbaik untuk data ini adalah **SES dengan $\lambda=0,2$**, dengan MSE sekitar 4560 dan MAPE sekitar 41%. Alasannya adalah:
+
+1.  Data bintik matahari tidak memiliki tren linear yang persisten, sehingga model tanpa komponen tren lebih tepat secara struktural.
+
+2.  Nilai $\lambda$ yang kecil menghasilkan level ramalan yang halus dan stabil, sehingga tidak terlalu terpengaruh oleh nilai ekstrem pada akhir data latih.
+
+3.  Ramalan yang konstan justru lebih aman untuk deret yang sangat berfluktuasi, karena tidak memperbesar galat seiring bertambahnya horizon peramalan.
+
+**Catatan mengenai nilai MAPE.** Seluruh metode menghasilkan MAPE di atas 10%, yang menunjukkan bahwa data bintik matahari memang tergolong sulit diramalkan dengan metode pemulusan sederhana. Hal ini berbeda dengan data penjualan pada contoh praktikum yang MAPE-nya di bawah 10%. Untuk peramalan yang lebih akurat, deret ini umumnya memerlukan model yang mampu menangkap struktur autokorelasi secara eksplisit, misalnya model ARIMA.
