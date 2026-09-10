@@ -1,0 +1,133 @@
+---
+title: "Tugas Pertemuan 3: Distributed Lag dan ARDL"
+author: "Nabeel Muhammad Diaz | M0401241069"
+date: "09 Agustus 2026"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Latihan 1: Distributed Lag Model
+
+Tujuan latihan ini adalah memodelkan **market share** (Y) berdasarkan
+**price** (X). Kandidat lag harga 0--6 dibandingkan dengan AIC terkecil.
+
+```{r data-latihan-1}
+latihan1 <- data.frame(
+  period = 1:20,
+  market_share = c(3.63, 4.20, 3.33, 4.54, 2.89, 4.87, 4.90, 5.29, 6.18, 7.20,7.25, 6.09, 6.80, 8.65, 8.43, 8.29, 7.18, 7.90, 8.45, 8.23),
+  price = c(0.97, 0.95, 0.99, 0.91, 0.98, 0.90, 0.89, 0.86, 0.85, 0.82,0.79, 0.83, 0.81, 0.77, 0.76, 0.80, 0.83, 0.79, 0.76, 0.83)
+)
+
+plot(latihan1$period, latihan1$market_share, type = "b", pch = 19,
+     xlab = "Periode", ylab = "Market share")
+plot(latihan1$period, latihan1$price, type = "b", pch = 19, col = "firebrick",
+     xlab = "Periode", ylab = "Price")
+```
+
+```{r fungsi}
+buat_lag <- function(data, y, x, max_p = 0, max_q = 0) {
+  hasil <- data
+  for (i in seq_len(max_p)) {
+    hasil[[paste0(y, "_lag", i)]] <- c(rep(NA, i), head(data[[y]], -i))
+  }
+  for (j in 0:max_q) {
+    hasil[[paste0(x, "_lag", j)]] <- if (j == 0) data[[x]] else
+      c(rep(NA, j), head(data[[x]], -j))
+  }
+  hasil
+}
+
+mape <- function(model) {
+  aktual <- model.response(model.frame(model))
+  mean(abs(residuals(model) / aktual)) * 100
+}
+```
+
+```{r model-dlm}
+max_lag_dlm <- 6
+dlm_data <- buat_lag(latihan1, "market_share", "price", max_q = max_lag_dlm)
+dlm_data <- dlm_data[(max_lag_dlm + 1):nrow(dlm_data), ]
+
+hasil_dlm <- do.call(rbind, lapply(0:max_lag_dlm, function(q) {
+  model <- lm(reformulate(paste0("price_lag", 0:q), response = "market_share"),
+              data = dlm_data)
+  data.frame(lag_harga = q, AIC = AIC(model), BIC = BIC(model), MAPE = mape(model))
+}))
+hasil_dlm
+
+lag_dlm_terbaik <- hasil_dlm$lag_harga[which.min(hasil_dlm$AIC)]
+model_dlm_terbaik <- lm(
+  reformulate(paste0("price_lag", 0:lag_dlm_terbaik), response = "market_share"),
+  data = dlm_data
+)
+cat("Lag DLM terbaik berdasarkan AIC:", lag_dlm_terbaik, "\n")
+summary(model_dlm_terbaik)
+```
+
+Model terpilih berbentuk
+`\(MarketShare_t = \alpha + \beta_0 Price_t + \cdots + \beta_q Price_{t-q} + e_t\)`.
+Nilai `lag_harga` menunjukkan berapa periode pengaruh harga masa lalu yang masuk model.
+
+# Latihan 2: Autoregressive Distributed Lag (ARDL)
+
+Latihan ini memodelkan **Sales** (Y) dengan Sales masa lalu serta
+**Advertising** (X) saat ini dan masa lalu. Kandidat ARDL(p, q), dengan
+p = 0--4 dan q = 0--4, dibandingkan menggunakan AIC.
+
+```{r data-latihan-2}
+latihan2 <- data.frame(
+  year = 1975:2014,
+  sales = c(11.7, 12.0, 12.3, 12.8, 13.1, 13.6, 13.9, 14.4, 14.7, 15.3,15.5, 15.8, 16.1, 16.4, 16.9, 16.7, 16.9, 17.4, 17.6, 17.9,
+18.0, 17.9, 18.0, 18.2, 18.2, 18.3, 18.6, 19.2, 19.3, 19.3, 19.2, 19.3, 19.5, 20.0, 20.0, 19.9, 19.8, 19.9, 20.2, 21.0),
+  advertising = c(9.4, 9.6, 10.0, 10.4, 10.8, 10.9, 11.7, 12.2, 12.5, 12.9, 13.0, 13.2, 13.8, 14.2, 14.6, 14.4, 15.0, 15.4, 15.7, 15.9, 15.9, 16.0, 16.3, 16.2, 16.8, 17.3, 17.6, 17.7, 18.3, 18.5, 18.7, 18.3, 18.7, 19.2, 20.0, 20.3, 20.4, 21.0, 21.5, 22.1)
+)
+
+plot(latihan2$year, latihan2$sales, type = "b", pch = 19,
+     xlab = "Tahun", ylab = "Sales")
+plot(latihan2$year, latihan2$advertising, type = "b", pch = 19, col = "steelblue",
+     xlab = "Tahun", ylab = "Advertising")
+```
+
+```{r model-ardl}
+max_p <- 4
+max_q <- 4
+ardl_data <- buat_lag(latihan2, "sales", "advertising", max_p, max_q)
+ardl_data <- ardl_data[(max(max_p, max_q) + 1):nrow(ardl_data), ]
+
+hasil_ardl <- do.call(rbind, lapply(0:max_p, function(p) {
+  do.call(rbind, lapply(0:max_q, function(q) {
+    lag_sales <- if (p == 0) character(0) else paste0("sales_lag", 1:p)
+    lag_iklan <- paste0("advertising_lag", 0:q)
+    model <- lm(reformulate(c(lag_sales, lag_iklan), response = "sales"), data = ardl_data)
+    data.frame(p = p, q = q, AIC = AIC(model), BIC = BIC(model), MAPE = mape(model))
+  }))
+}))
+hasil_ardl[order(hasil_ardl$AIC), ]
+
+baris_terbaik <- hasil_ardl[which.min(hasil_ardl$AIC), ]
+p_terbaik <- baris_terbaik$p
+q_terbaik <- baris_terbaik$q
+lag_sales <- if (p_terbaik == 0) character(0) else paste0("sales_lag", 1:p_terbaik)
+lag_iklan <- paste0("advertising_lag", 0:q_terbaik)
+model_ardl_terbaik <- lm(reformulate(c(lag_sales, lag_iklan), response = "sales"),
+                          data = ardl_data)
+cat("Model ARDL terbaik berdasarkan AIC: ARDL(", p_terbaik, ", ", q_terbaik, ")\n",
+    sep = "")
+summary(model_ardl_terbaik)
+```
+
+Model terpilih berbentuk
+`\(Sales_t = \alpha + \sum_{i=1}^{p}\phi_i Sales_{t-i} +
+\sum_{j=0}^{q}\beta_j Advertising_{t-j} + e_t\)`.
+
+# Kesimpulan
+
+Pada Latihan 1, model Distributed Lag terbaik menggunakan lag harga hingga
+periode `r lag_dlm_terbaik`, berdasarkan nilai AIC terkecil.
+
+Pada Latihan 2, model terbaik adalah ARDL(`r p_terbaik`, `r q_terbaik`),
+berdasarkan nilai AIC terkecil. Nilai MAPE dan BIC digunakan sebagai informasi
+pembanding kualitas model.
