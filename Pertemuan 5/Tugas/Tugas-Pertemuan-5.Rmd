@@ -1,0 +1,400 @@
+---
+title: "Tugas Pertemuan 5: Pembangkitan Proses MA(2), AR(2), dan ARMA(2,2)"
+author: "Nabeel Muhammad Diaz | M0401241069"
+date: "17 September 2026"
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+## *Packages*
+
+```{r}
+library(TSA)      # eacf(); acf() versi TSA menampilkan plot tanpa lag 0
+library(tseries)  # adf.test()
+library(MASS)     # boxcox()
+```
+
+```{r}
+set.seed(1069)
+n <- 300
+```
+
+## Fungsi Bantu
+
+Ketiga proses dianalisis dengan langkah yang sama, sehingga langkah-langkah
+tersebut dibungkus dalam beberapa fungsi agar tidak ditulis berulang.
+
+```{r}
+# Plot time series, ACF, PACF, dan EACF
+plot_eksplorasi <- function(y, judul) {
+  par(mfrow = c(3, 1), mar = c(4, 4, 3, 1))
+  plot(y, type = "l", main = paste("Plot Time Series", judul),
+       xlab = "Waktu", ylab = "Nilai")
+  abline(h = mean(y), col = "red", lty = 2)
+  acf(y, lag.max = 20, main = paste("Plot ACF", judul))
+  pacf(y, lag.max = 20, main = paste("Plot PACF", judul))
+  par(mfrow = c(1, 1))
+}
+
+# Uji ADF (stasioner rataan) dan Box-Cox (stasioner ragam).
+# boxcox() butuh data positif, sehingga data digeser dengan konstanta.
+cek_stasioner <- function(y) {
+  adf <- adf.test(y)
+  y_pos <- y - min(y) + 1
+  index <- seq_along(y)
+  bc <- boxcox(y_pos ~ index, lambda = seq(-2, 6, by = 0.01))
+  ci <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+  list(adf = adf,
+       lambda = bc$x[which.max(bc$y)],
+       ci = c(Batas_Bawah = min(ci), Batas_Atas = max(ci)))
+}
+
+# Scatterplot Y_t dengan Y_(t-1), Y_(t-2), Y_(t-3)
+scatter_lag <- function(y, judul) {
+  par(mfrow = c(1, 3))
+  for (k in 1:3) {
+    yt  <- y[(k + 1):length(y)]
+    ytk <- y[1:(length(y) - k)]
+    plot(ytk, yt, pch = 20, col = "steelblue",
+         xlab = bquote(Y[t - .(k)]), ylab = expression(Y[t]),
+         main = paste0(judul, ": lag ", k))
+    abline(lm(yt ~ ytk), col = "red")
+  }
+  par(mfrow = c(1, 1))
+}
+
+# Autokorelasi lag 1-3: data bangkitan (korelasi pasangan & fungsi acf) vs teoritis.
+# stats::acf dipakai karena TSA::acf membuang lag 0.
+tabel_autokorelasi <- function(y, ar = numeric(), ma = numeric()) {
+  kor <- sapply(1:3, function(k) cor(y[(k + 1):length(y)], y[1:(length(y) - k)]))
+  data.frame(
+    Lag = 1:3,
+    Korelasi_Pasangan = round(kor, 4),
+    ACF_Sampel = round(stats::acf(y, lag.max = 3, plot = FALSE)$acf[2:4], 4),
+    ACF_Teoritis = round(ARMAacf(ar = ar, ma = ma, lag.max = 3)[2:4], 4)
+  )
+}
+```
+
+> **Catatan:** Model dibangkitkan dengan konvensi tanda yang sama dengan
+> `arima.sim()`, yaitu
+> $Y_t = \phi_1 Y_{t-1} + \phi_2 Y_{t-2} + e_t + \theta_1 e_{t-1} + \theta_2 e_{t-2}$
+> dengan $e_t \sim N(0,1)$.
+
+# 1. Proses MA(2)
+
+Model: $Y_t = e_t + 0.4\,e_{t-1} + 0.6\,e_{t-2}$
+
+## Pembangkitan Data
+
+### Manual
+
+```{r}
+wn_ma <- rnorm(n)
+ma <- wn_ma[1:2]
+for (i in 3:n) {
+  ma[i] <- wn_ma[i] + 0.4 * wn_ma[i - 1] + 0.6 * wn_ma[i - 2]
+}
+ma <- ts(ma)
+head(ma)
+```
+
+### Dengan `arima.sim`
+
+```{r}
+ma_sim <- arima.sim(list(order = c(0, 0, 2), ma = c(0.4, 0.6)), n = n)
+head(ma_sim)
+```
+
+Analisis selanjutnya menggunakan data hasil pembangkitan manual.
+
+## Plot Time Series, ACF, PACF, dan EACF
+
+```{r, fig.height=9}
+plot_eksplorasi(ma, "MA(2)")
+```
+
+```{r}
+eacf(ma)
+```
+
+```{r, fig.height=4}
+st_ma <- cek_stasioner(ma)
+st_ma$adf
+st_ma$lambda
+st_ma$ci
+```
+
+**Identifikasi:**
+
+- Plot time series menunjukkan data berfluktuasi di sekitar nilai tengahnya
+  (`r round(mean(ma), 3)`) dengan lebar fluktuasi yang relatif sama sepanjang
+  waktu, sehingga secara eksplorasi data stasioner dalam rataan dan ragam.
+- Plot ACF *cuts off* setelah lag ke-2, sedangkan plot PACF cenderung
+  *tails off*. Pola ini sesuai dengan karakteristik MA(2).
+- Pada EACF, segitiga nol (`o`) berawal pada baris AR = 0 dan kolom MA = 2,
+  sehingga EACF menyarankan model ARMA(0,2) atau MA(2), sesuai dengan model
+  yang dibangkitkan.
+- Uji ADF — $H_0$: data tidak stasioner dalam rataan, $H_1$: data stasioner
+  dalam rataan. Diperoleh *p-value* sebesar
+  `r round(st_ma$adf$p.value, 4)`
+  `r ifelse(st_ma$adf$p.value < 0.05, "< 0.05 sehingga tolak $H_0$: data **stasioner dalam rataan**.", ">= 0.05 sehingga tak tolak $H_0$: data belum terbukti stasioner dalam rataan.")`
+- Box-Cox memberikan $\lambda$ optimum `r st_ma$lambda` dengan selang
+  kepercayaan 95% [`r st_ma$ci[1]`, `r st_ma$ci[2]`], yang
+  `r ifelse(st_ma$ci[1] <= 1 & st_ma$ci[2] >= 1, "memuat nilai 1 sehingga data **stasioner dalam ragam**.", "tidak memuat nilai 1 sehingga data belum stasioner dalam ragam.")`
+
+Secara teoritis, proses MA berorde hingga **selalu stasioner** untuk nilai
+$\theta$ berapa pun, sehingga hasil di atas sesuai dengan teori.
+
+## Scatterplot $Y_t$ dengan $Y_{t-1}$, $Y_{t-2}$, dan $Y_{t-3}$
+
+```{r, fig.width=10, fig.height=3.5}
+scatter_lag(ma, "MA(2)")
+```
+
+Scatterplot lag 1 dan lag 2 menunjukkan hubungan positif, sedangkan pada
+lag 3 titik-titik menyebar acak tanpa pola (tidak ada hubungan).
+
+## Autokorelasi
+
+Autokorelasi teoritis MA(2):
+
+$$\rho_1 = \frac{\theta_1 + \theta_1\theta_2}{1+\theta_1^2+\theta_2^2} = \frac{0.4 + 0.24}{1.52} = 0.4211, \quad
+\rho_2 = \frac{\theta_2}{1+\theta_1^2+\theta_2^2} = \frac{0.6}{1.52} = 0.3947, \quad
+\rho_k = 0 \text{ untuk } k \ge 3$$
+
+```{r}
+ak_ma <- tabel_autokorelasi(ma, ma = c(0.4, 0.6))
+ak_ma
+```
+
+Autokorelasi data bangkitan pada lag 1 dan 2 bernilai cukup dekat dengan
+nilai teoritisnya, dan pada lag 3 mendekati nol sesuai teori
+($\rho_3 = 0$). Perbedaan kecil muncul karena keragaman sampel.
+
+# 2. Proses AR(2)
+
+Model: $Y_t = 0.5\,Y_{t-1} + 0.2\,Y_{t-2} + e_t$
+
+## Pembangkitan Data
+
+### Manual
+
+```{r}
+wn_ar <- rnorm(n)
+ar <- wn_ar[1:2]
+for (i in 3:n) {
+  ar[i] <- 0.5 * ar[i - 1] + 0.2 * ar[i - 2] + wn_ar[i]
+}
+ar <- ts(ar)
+head(ar)
+```
+
+### Dengan `arima.sim`
+
+```{r}
+ar_sim <- arima.sim(list(order = c(2, 0, 0), ar = c(0.5, 0.2)), n = n)
+head(ar_sim)
+```
+
+## Plot Time Series, ACF, PACF, dan EACF
+
+```{r, fig.height=9}
+plot_eksplorasi(ar, "AR(2)")
+```
+
+```{r}
+eacf(ar)
+```
+
+```{r, fig.height=4}
+st_ar <- cek_stasioner(ar)
+st_ar$adf
+st_ar$lambda
+st_ar$ci
+```
+
+**Identifikasi:**
+
+- Plot time series menunjukkan data berfluktuasi di sekitar nilai tengahnya
+  (`r round(mean(ar), 3)`) dengan lebar fluktuasi yang relatif sama, sehingga
+  secara eksplorasi data stasioner dalam rataan dan ragam.
+- Plot ACF *tails off* (menurun perlahan secara eksponensial), sedangkan
+  plot PACF *cuts off* setelah lag ke-2. Pola ini sesuai dengan
+  karakteristik AR(2).
+- Secara teori, segitiga nol pada EACF berawal pada baris AR = 2 dan kolom
+  MA = 0. Pada data ini, baris AR = 0 dan AR = 2 masih memuat beberapa `x`
+  di awal, sedangkan segitiga nol paling jelas berawal pada baris AR = 1
+  kolom MA = 1, sehingga EACF menyarankan ARMA(1,1) sebagai kandidat. EACF
+  hanya memberi kandidat model; orde AR(2) tetap terlihat jelas dari PACF
+  yang *cuts off* setelah lag 2.
+- Uji ADF memberikan *p-value* sebesar `r round(st_ar$adf$p.value, 4)`
+  `r ifelse(st_ar$adf$p.value < 0.05, "< 0.05 sehingga tolak $H_0$: data **stasioner dalam rataan**.", ">= 0.05 sehingga tak tolak $H_0$: data belum terbukti stasioner dalam rataan.")`
+- Box-Cox memberikan $\lambda$ optimum `r st_ar$lambda` dengan selang
+  kepercayaan 95% [`r st_ar$ci[1]`, `r st_ar$ci[2]`], yang
+  `r ifelse(st_ar$ci[1] <= 1 & st_ar$ci[2] >= 1, "memuat nilai 1 sehingga data **stasioner dalam ragam**.", "tidak memuat nilai 1 sehingga data belum stasioner dalam ragam.")`
+
+Secara teoritis, AR(2) stasioner jika $\phi_1 + \phi_2 < 1$,
+$\phi_2 - \phi_1 < 1$, dan $|\phi_2| < 1$. Dengan $\phi_1 = 0.5$ dan
+$\phi_2 = 0.2$: $0.7 < 1$, $-0.3 < 1$, dan $0.2 < 1$, sehingga ketiga syarat
+terpenuhi. Hal ini juga dapat dicek dari akar polinomial karakteristik yang
+seluruhnya berada di luar lingkaran satuan:
+
+```{r}
+Mod(polyroot(c(1, -0.5, -0.2)))
+```
+
+## Scatterplot $Y_t$ dengan $Y_{t-1}$, $Y_{t-2}$, dan $Y_{t-3}$
+
+```{r, fig.width=10, fig.height=3.5}
+scatter_lag(ar, "AR(2)")
+```
+
+Ketiga scatterplot menunjukkan hubungan positif yang semakin melemah
+seiring bertambahnya lag, sesuai dengan ACF AR yang meluruh secara
+eksponensial.
+
+## Autokorelasi
+
+Autokorelasi teoritis AR(2) mengikuti persamaan Yule-Walker:
+
+$$\rho_1 = \frac{\phi_1}{1-\phi_2} = \frac{0.5}{0.8} = 0.625, \quad
+\rho_2 = \phi_1\rho_1 + \phi_2 = 0.5125, \quad
+\rho_3 = \phi_1\rho_2 + \phi_2\rho_1 = 0.3813$$
+
+```{r}
+ak_ar <- tabel_autokorelasi(ar, ar = c(0.5, 0.2))
+ak_ar
+```
+
+Autokorelasi data bangkitan mengikuti pola teoritis, yaitu positif dan
+menurun seiring bertambahnya lag, dengan selisih kecil akibat keragaman
+sampel.
+
+# 3. Proses ARMA(2,2)
+
+Model:
+$Y_t = 0.5\,Y_{t-1} + 0.2\,Y_{t-2} + e_t + 0.4\,e_{t-1} + 0.6\,e_{t-2}$
+
+## Pembangkitan Data
+
+### Manual
+
+```{r}
+wn_arma <- rnorm(n)
+arma <- wn_arma[1:2]
+for (i in 3:n) {
+  arma[i] <- 0.5 * arma[i - 1] + 0.2 * arma[i - 2] +
+    wn_arma[i] + 0.4 * wn_arma[i - 1] + 0.6 * wn_arma[i - 2]
+}
+arma <- ts(arma)
+head(arma)
+```
+
+### Dengan `arima.sim`
+
+```{r}
+arma_sim <- arima.sim(list(order = c(2, 0, 2), ar = c(0.5, 0.2), ma = c(0.4, 0.6)), n = n)
+head(arma_sim)
+```
+
+## Plot Time Series, ACF, PACF, dan EACF
+
+```{r, fig.height=9}
+plot_eksplorasi(arma, "ARMA(2,2)")
+```
+
+```{r}
+eacf(arma)
+```
+
+```{r, fig.height=4}
+st_arma <- cek_stasioner(arma)
+st_arma$adf
+st_arma$lambda
+st_arma$ci
+```
+
+**Identifikasi:**
+
+- Plot time series menunjukkan data berfluktuasi di sekitar nilai tengahnya
+  (`r round(mean(arma), 3)`) dengan lebar fluktuasi yang relatif sama, sehingga
+  secara eksplorasi data stasioner dalam rataan dan ragam.
+- Plot ACF dan PACF sama-sama *tails off*, yang merupakan ciri proses
+  ARMA. Karena keduanya *tails off*, orde model sulit ditentukan hanya dari
+  ACF dan PACF, sehingga digunakan EACF.
+- Secara teori, segitiga nol pada EACF berawal pada baris AR = 2 dan kolom
+  MA = 2. Pada data ini, segitiga nol berawal di sekitar baris AR = 1
+  kolom MA = 2 (masih ada `x` pada kolom MA = 7), sehingga kandidat yang
+  disarankan adalah ARMA(1,2), bersebelahan dengan model sebenarnya
+  ARMA(2,2). Pergeseran ini wajar karena keragaman sampel.
+- Uji ADF memberikan *p-value* sebesar `r round(st_arma$adf$p.value, 4)`
+  `r ifelse(st_arma$adf$p.value < 0.05, "< 0.05 sehingga tolak $H_0$: data **stasioner dalam rataan**.", ">= 0.05 sehingga tak tolak $H_0$: data belum terbukti stasioner dalam rataan.")`
+- Box-Cox memberikan $\lambda$ optimum `r st_arma$lambda` dengan selang
+  kepercayaan 95% [`r st_arma$ci[1]`, `r st_arma$ci[2]`], yang
+  `r ifelse(st_arma$ci[1] <= 1 & st_arma$ci[2] >= 1, "memuat nilai 1 sehingga data **stasioner dalam ragam**.", "tidak memuat nilai 1 sehingga data belum stasioner dalam ragam.")`
+
+> **Catatan Box-Cox:** data ARMA bernilai negatif sehingga harus digeser
+> dengan konstanta sebelum Box-Cox, dan nilai $\lambda$ sensitif terhadap
+> besar konstanta tersebut. Jika selang kepercayaan tidak memuat 1 tetapi
+> batasnya sangat dekat dengan 1 (seperti di atas) dan plot time series
+> tidak menunjukkan perubahan lebar fluktuasi, hasil tersebut lebih tepat
+> dianggap sebagai efek pergeseran data dan keragaman sampel, bukan bukti
+> ketidakstasioneran ragam.
+
+Kestasioneran ARMA hanya ditentukan oleh komponen AR-nya. Komponen AR di
+sini sama dengan proses AR(2) di atas yang memenuhi syarat stasioner,
+sehingga ARMA(2,2) ini juga **stasioner**.
+
+## Scatterplot $Y_t$ dengan $Y_{t-1}$, $Y_{t-2}$, dan $Y_{t-3}$
+
+```{r, fig.width=10, fig.height=3.5}
+scatter_lag(arma, "ARMA(2,2)")
+```
+
+Ketiga scatterplot menunjukkan hubungan positif yang kuat dan melemah
+perlahan seiring bertambahnya lag.
+
+## Autokorelasi
+
+Autokorelasi teoritis ARMA(2,2) dihitung dengan fungsi `ARMAacf()`.
+Untuk $k > 2$ (melewati orde MA), autokorelasi mengikuti persamaan rekursif
+$\rho_k = \phi_1\rho_{k-1} + \phi_2\rho_{k-2}$.
+
+```{r}
+ak_arma <- tabel_autokorelasi(arma, ar = c(0.5, 0.2), ma = c(0.4, 0.6))
+ak_arma
+```
+
+Autokorelasi data bangkitan mengikuti pola teoritis: bernilai positif
+tinggi dan menurun perlahan seiring bertambahnya lag.
+
+# Kesimpulan
+
+```{r}
+rbind(
+  data.frame(Model = "MA(2)", ak_ma),
+  data.frame(Model = "AR(2)", ak_ar),
+  data.frame(Model = "ARMA(2,2)", ak_arma)
+)
+```
+
+| Model | ACF | PACF | Stasioner |
+|---|---|---|---|
+| MA(2) | *cuts off* setelah lag 2 | *tails off* | Ya (MA selalu stasioner) |
+| AR(2) | *tails off* | *cuts off* setelah lag 2 | Ya ($\phi_1+\phi_2<1$, $\phi_2-\phi_1<1$, $|\phi_2|<1$) |
+| ARMA(2,2) | *tails off* | *tails off* | Ya (komponen AR stasioner) |
+
+Uji ADF menunjukkan ketiga data bangkitan stasioner dalam rataan. Box-Cox
+mendukung kestasioneran ragam pada MA(2) dan AR(2); pada ARMA(2,2) selang
+kepercayaan $\lambda$ nyaris memuat 1 dan plot time series tetap
+menunjukkan ragam yang konstan, sesuai teori bahwa ketiga proses stasioner.
+Autokorelasi sampel mengikuti pola teoritis masing-masing, dengan selisih
+akibat keragaman sampel.
