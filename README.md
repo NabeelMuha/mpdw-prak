@@ -47,6 +47,7 @@ mpdw-prak/
 | 3 | Regresi dengan peubah lag | [Latihan](Pertemuan%203/Latihan/Pertemuan-3.Rmd) · [Tugas](Pertemuan%203/Tugas/Tugas-Pertemuan-3.Rmd) |
 | 4 | Pembangkitan proses ARMA | [Materi](Pertemuan%204/Pembangkitan-ARMA.Rmd) |
 | 5 | Stasioneritas, tren, differencing, dan transformasi Box–Cox | [Latihan](Pertemuan%205/Latihan/Pertemuan-5.Rmd) · [Tugas](Pertemuan%205/Tugas/Tugas-Pertemuan-5.Rmd) |
+| 6 | Pemodelan ARIMA, pendugaan parameter, diagnostik model, dan peramalan | [Latihan](Pertemuan%206/Latihan/Pertemuan-6.Rmd) |
 
 Setiap materi memiliki hasil HTML dengan nama yang sama dan ekstensi `.html` di folder yang sama.
 
@@ -60,6 +61,10 @@ Setiap materi memiliki hasil HTML dengan nama yang sama dan ekstensi `.html` di 
 - **Latihan** mengikuti materi sumber terbaru tentang stasioneritas dalam rataan dan ragam, simulasi tren, differencing, partisi data, dan transformasi Box–Cox.
 - **Tugas** membangkitkan serta menganalisis proses MA(2), AR(2), dan ARMA(2,2).
 
+### Pertemuan 6
+
+- **Latihan** mencakup identifikasi, pendugaan parameter, diagnostik sisaan, overfitting, dan peramalan ARIMA pada data bangkitan dan kurs.
+
 ---
 
 ## Cara Menjalankan
@@ -68,7 +73,7 @@ Setiap materi memiliki hasil HTML dengan nama yang sama dan ekstensi `.html` di 
 2. Install package yang dibutuhkan:
 
 ```r
-install.packages(c("forecast", "graphics", "TTR", "TSA", "rio", "ggplot2", "dplyr", "lmtest", "orcutt", "HoRM", "dLagM", "dynlm", "MLmetrics", "car", "tsibble", "tseries", "MASS"))
+install.packages(c("forecast", "graphics", "TTR", "TSA", "aTSA", "rio", "ggplot2", "dplyr", "lmtest", "orcutt", "HoRM", "dLagM", "dynlm", "MLmetrics", "car", "tsibble", "tseries", "MASS"))
 ```
 
 3. Buka `.Rmd` yang diinginkan, lalu **Knit**. Working directory chunk mengikuti lokasi file `.Rmd`, sehingga `data/...` langsung terbaca.
@@ -78,10 +83,11 @@ install.packages(c("forecast", "graphics", "TTR", "TSA", "rio", "ggplot2", "dply
 | Package | Kegunaan |
 |---|---|
 | `forecast`, `TTR`, `TSA` | Peramalan, pemulusan, dan analisis deret waktu |
+| `aTSA` | Analisis dan diagnostik deret waktu (Pertemuan 6) |
 | `graphics`, `ggplot2` | Visualisasi |
 | `rio` | Impor data lintas format |
 | `dplyr`, `lmtest`, `orcutt`, `HoRM`, `dLagM`, `dynlm`, `MLmetrics`, `car` | Regresi, autokorelasi, dan ukuran akurasi (Pertemuan 2–3) |
-| `tsibble`, `tseries`, `MASS` | Data deret waktu, uji stasioneritas, dan transformasi Box–Cox (Pertemuan 5) |
+| `tsibble`, `tseries`, `MASS` | Data deret waktu, uji stasioneritas, dan transformasi Box–Cox (Pertemuan 5–6) |
 
 ---
 
