@@ -47,7 +47,7 @@ mpdw-prak/
 | 3 | Regresi dengan peubah lag | [Latihan](Pertemuan%203/Latihan/Pertemuan-3.Rmd) · [Tugas](Pertemuan%203/Tugas/Tugas-Pertemuan-3.Rmd) |
 | 4 | Pembangkitan proses ARMA | [Materi](Pertemuan%204/Pembangkitan-ARMA.Rmd) |
 | 5 | Stasioneritas, tren, differencing, dan transformasi Box–Cox | [Latihan](Pertemuan%205/Latihan/Pertemuan-5.Rmd) · [Tugas](Pertemuan%205/Tugas/Tugas-Pertemuan-5.Rmd) |
-| 6 | Pemodelan ARIMA, pendugaan parameter, diagnostik model, dan peramalan | [Latihan](Pertemuan%206/Latihan/Pertemuan-6.Rmd) |
+| 6 | Pemodelan ARIMA, pendugaan parameter, diagnostik model, dan peramalan | [Latihan](Pertemuan%206/Latihan/Pertemuan-6.Rmd) · [Tugas](Pertemuan%206/Tugas/Tugas-Pertemuan-6.Rmd) |
 
 Setiap materi memiliki hasil HTML dengan nama yang sama dan ekstensi `.html` di folder yang sama.
 
@@ -64,6 +64,7 @@ Setiap materi memiliki hasil HTML dengan nama yang sama dan ekstensi `.html` di 
 ### Pertemuan 6
 
 - **Latihan** mencakup identifikasi, pendugaan parameter, diagnostik sisaan, overfitting, dan peramalan ARIMA pada data bangkitan dan kurs.
+- **Tugas** menerapkan pemodelan ARIMA pada 100 amatan sunspot dari Tugas Pertemuan 1, dengan pembagian 80 amatan latih dan 20 amatan uji.
 
 ---
 

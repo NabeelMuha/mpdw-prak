@@ -1,0 +1,173 @@
+---
+title: "Tugas Pertemuan 6: Pemodelan ARIMA Data Sunspot"
+author: "Nabeel Muhammad Diaz | M0401241069"
+date: "24 September 2026"
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+## Tujuan
+
+Lakukan pemodelan ARIMA pada 100 amatan **Daily Total Sunspot Number** dari Tugas Pertemuan 1. Ikuti tahapan latihan Pertemuan 6: eksplorasi, pemeriksaan kestasioneran, identifikasi dan pendugaan model, diagnostik sisaan, overfitting, serta peramalan.
+
+## Packages dan Data
+
+```{r packages}
+library(forecast)
+library(TSA)
+library(tseries)
+```
+
+Data dibaca dari file Tugas Pertemuan 1 agar dataset yang sama tidak perlu disalin dua kali.
+
+```{r data}
+data <- read.csv("../../Pertemuan 1/Tugas/data/sunspot_bagian2.csv")
+stopifnot(nrow(data) == 100, all(c("Tanggal", "Sunspot") %in% names(data)))
+sunspot.ts <- ts(data$Sunspot)
+n_train <- floor(0.8 * length(sunspot.ts))
+train.ts <- ts(sunspot.ts[1:n_train])
+test.ts <- ts(sunspot.ts[(n_train + 1):length(sunspot.ts)], start = n_train + 1)
+data.frame(Jumlah = length(sunspot.ts),
+           Tanggal_awal = data$Tanggal[1], Tanggal_akhir = data$Tanggal[100],
+           Data_latih = length(train.ts), Data_uji = length(test.ts))
+```
+
+## Eksplorasi Data
+
+```{r eksplorasi}
+plot(sunspot.ts, type = "o", pch = 16, cex = 0.5,
+     xlab = "Hari pengamatan", ylab = "Bilangan sunspot",
+     main = "Daily Total Sunspot Number (100 amatan)")
+summary(sunspot.ts)
+```
+
+80 amatan pertama menjadi data latih; 20 amatan terakhir disimpan untuk mengukur akurasi ramalan di luar sampel.
+
+## Pemeriksaan Kestasioneran
+
+```{r stasioneritas}
+par(mfrow = c(1, 2))
+plot(train.ts, type = "o", pch = 16, cex = 0.5,
+     xlab = "Hari pengamatan", ylab = "Sunspot", main = "Data latih")
+acf(train.ts, lag.max = 20, main = "ACF data latih")
+par(mfrow = c(1, 1))
+tseries::adf.test(train.ts)
+```
+
+Hipotesis nol ADF menyatakan data memiliki akar unit. Jika p-value di bawah 0,05, data latih dianggap stasioner dan gunakan `d = 0`; jika tidak, lakukan differencing pertama dan gunakan `d = 1`.
+
+```{r differencing}
+adf_awal <- tseries::adf.test(train.ts)
+d <- if (adf_awal$p.value < 0.05) 0L else 1L
+train.diff <- diff(train.ts)
+par(mfrow = c(1, 2))
+plot(train.diff, type = "o", pch = 16, cex = 0.5,
+     xlab = "Hari pengamatan", ylab = "Selisih sunspot",
+     main = "Differencing pertama")
+acf(train.diff, lag.max = 20, main = "ACF setelah differencing")
+par(mfrow = c(1, 1))
+tseries::adf.test(train.diff)
+```
+
+## Identifikasi dan Pendugaan Model
+
+Gunakan ACF, PACF, dan EACF dari seri stasioner untuk menyusun kandidat. Orde `d` ditentukan dari uji ADF data latih.
+
+```{r identifikasi}
+seri.stasioner <- if (d == 0) train.ts else train.diff
+par(mfrow = c(1, 2))
+acf(seri.stasioner, lag.max = 20, main = "ACF seri stasioner")
+pacf(seri.stasioner, lag.max = 20, main = "PACF seri stasioner")
+par(mfrow = c(1, 1))
+TSA::eacf(seri.stasioner)
+d
+```
+
+Bandingkan kandidat dengan AIC. Periksa juga signifikansi parameter dan diagnostik sisaan sebelum menetapkan model.
+
+```{r pendugaan}
+kandidat <- list(ARIMA_0d0 = c(0,d,0), ARIMA_0d1 = c(0,d,1),
+                 ARIMA_1d0 = c(1,d,0), ARIMA_1d1 = c(1,d,1),
+                 ARIMA_0d2 = c(0,d,2), ARIMA_2d0 = c(2,d,0))
+model <- lapply(kandidat, function(ord)
+  forecast::Arima(train.ts, order = ord, method = "ML"))
+tabel_model <- data.frame(Model = names(kandidat),
+                          AIC = vapply(model, AIC, numeric(1)),
+                          BIC = vapply(model, BIC, numeric(1)))
+tabel_model <- tabel_model[order(tabel_model$AIC), ]
+knitr::kable(tabel_model, digits = 3)
+model_terbaik <- model[[tabel_model$Model[1]]]
+summary(model_terbaik)
+lmtest::coeftest(model_terbaik)
+```
+
+## Diagnostik Sisaan
+
+Periksa normalitas, autokorelasi, dan perubahan ragam sisaan secara visual serta dengan uji formal.
+
+```{r diagnostik}
+sisaan <- na.omit(residuals(model_terbaik))
+par(mfrow = c(2, 2))
+plot(sisaan, type = "o", pch = 16, cex = 0.5,
+     main = "Sisaan model", xlab = "Waktu", ylab = "Sisaan")
+acf(sisaan, lag.max = 20, main = "ACF sisaan")
+qqnorm(sisaan, main = "Normal Q-Q sisaan")
+qqline(sisaan, col = "red")
+acf(sisaan^2, lag.max = 20, main = "ACF kuadrat sisaan")
+par(mfrow = c(1, 1))
+shapiro.test(sisaan)
+Box.test(sisaan, lag = 10, type = "Ljung-Box",
+         fitdf = length(coef(model_terbaik)))
+Box.test(sisaan^2, lag = 10, type = "Ljung-Box")
+```
+
+## Overfitting
+
+Bandingkan model terpilih dengan model yang orde AR atau MA-nya dinaikkan satu. Pilih model sederhana bila penambahan parameter tidak memperbaiki AIC atau parameternya tidak signifikan.
+
+```{r overfitting}
+orde <- arimaorder(model_terbaik)
+overfit_orders <- list(
+  AR_ditambah = c(orde["p"] + 1, orde["d"], orde["q"]),
+  MA_ditambah = c(orde["p"], orde["d"], orde["q"] + 1))
+model_overfit <- lapply(overfit_orders, function(ord)
+  forecast::Arima(train.ts, order = as.integer(ord), method = "ML"))
+perbandingan <- data.frame(
+  Model = c("Model terpilih", names(model_overfit)),
+  AIC = c(AIC(model_terbaik), vapply(model_overfit, AIC, numeric(1))),
+  BIC = c(BIC(model_terbaik), vapply(model_overfit, BIC, numeric(1))),
+  RMSE_uji = c(
+    forecast::accuracy(forecast::forecast(model_terbaik, h = length(test.ts)), test.ts)["Test set", "RMSE"],
+    vapply(model_overfit, function(m) {
+      forecast::accuracy(forecast::forecast(m, h = length(test.ts)), test.ts)["Test set", "RMSE"]
+    }, numeric(1))))
+knitr::kable(perbandingan, digits = 3)
+lapply(model_overfit, lmtest::coeftest)
+```
+
+## Peramalan dan Akurasi
+
+Ramalkan 20 amatan data uji dan hitung ukuran akurasi dengan membandingkan hasil ramalan dengan nilai aktual.
+
+```{r peramalan}
+ramalan <- forecast::forecast(model_terbaik, h = length(test.ts))
+plot(ramalan, xlab = "Hari pengamatan", ylab = "Sunspot",
+     main = "Ramalan ARIMA dan data uji")
+lines(test.ts, col = "red", lwd = 2)
+legend("topleft", legend = c("Ramalan", "Aktual (data uji)"),
+       col = c("blue", "red"), lty = 1, bty = "n")
+forecast::accuracy(ramalan, test.ts)
+```
+
+## Kesimpulan
+
+Pada data latih, uji ADF menghasilkan p-value 0,029 sehingga seri dimodelkan tanpa differencing (`d = 0`). Berdasarkan kandidat awal, ARIMA(2,0,0) memiliki AIC terkecil (677,46); kedua koefisien AR signifikan. Uji Shapiro–Wilk (p = 0,939), Ljung–Box pada sisaan (p = 0,088), dan Ljung–Box pada kuadrat sisaan (p = 0,443) tidak menunjukkan pelanggaran diagnostik pada taraf 5%.
+
+Model overfit ARIMA(2,0,1) memiliki AIC lebih rendah (667,73), tetapi RMSE data ujinya lebih besar daripada ARIMA(2,0,0) (39,50 dibanding 35,10). Karena tujuan akhirnya meramal data yang ditahan, ARIMA(2,0,0) dipilih. Pada 20 amatan uji, RMSE = 35,10, MAE = 31,49, dan MAPE = 19,90%. Hasil ini hanya menggambarkan periode sunspot 27 Juni–4 Oktober 2025 dan pembagian data yang digunakan.
